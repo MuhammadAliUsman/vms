@@ -1,22 +1,94 @@
 #!/bin/bash
 set -e
 
+#################################
+# Auto root
+#################################
 if [ "$EUID" -ne 0 ]; then
-  echo "❌ Run as root"
-  exit 1
+  exec sudo bash "$0" "$@"
 fi
+
+#################################
+# Colors
+#################################
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+#################################
+# Banner
+#################################
+clear
+echo -e "${CYAN}"
+cat << "EOF"
+██████╗ ██████╗  █████╗  ██████╗  ██████╗ ███╗   ██╗
+██╔══██╗██╔══██╗██╔══██╗██╔════╝ ██╔════╝ ████╗  ██║
+██║  ██║██████╔╝███████║██║  ███╗██║  ███╗██╔██╗ ██║
+██║  ██║██╔══██╗██╔══██║██║   ██║██║   ██║██║╚██╗██║
+██████╔╝██║  ██║██║  ██║╚██████╔╝╚██████╔╝██║ ╚████║
+╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝
+
+        DragonCloud VPS Patcher
+        QualityWise • No Compromise
+EOF
+echo -e "${NC}"
+
+#################################
+# Loading bar
+#################################
+loading () {
+  echo -ne "${CYAN}$1${NC} "
+  for i in {1..20}; do
+    echo -ne "█"
+    sleep 0.05
+  done
+  echo -e " ${GREEN}OK${NC}"
+}
+
+#################################
+# PATCHER (AUTO RUN)
+#################################
+export DEBIAN_FRONTEND=noninteractive
+
+loading "Initializing system"
+
+# Fix broken repos (Yarn etc.)
+rm -f /etc/apt/sources.list.d/yarn.list || true
+rm -f /usr/share/keyrings/yarnkey.gpg || true
+
+loading "Updating packages"
+apt update -y >/dev/null 2>&1
+
+loading "Upgrading system"
+apt upgrade -y >/dev/null 2>&1
+
+DEPS=(
+  curl wget sudo ca-certificates gnupg lsb-release
+  software-properties-common unzip zip htop
+  net-tools iputils-ping screen tmux git
+  build-essential qemu-utils libvirt-daemon-system
+  libvirt-clients virtinst bridge-utils cloud-image-utils
+)
+
+loading "Installing dependencies"
+apt install -y "${DEPS[@]}" >/dev/null 2>&1
+
+loading "Cleaning system"
+apt autoremove -y >/dev/null 2>&1
+apt autoclean -y >/dev/null 2>&1
+
+#################################
+# PATCH DONE → INSTALLER START
+#################################
+clear
+echo -e "${GREEN}✔ DragonCloud VPS Patch Completed${NC}"
+sleep 1
 
 WORKDIR=/root/os-installer
 mkdir -p $WORKDIR
 
-install_deps() {
-  apt update
-  apt install -y wget qemu-utils libvirt-daemon-system libvirt-clients virtinst bridge-utils cloud-image-utils
-}
-
-clear
 echo "========================================"
-echo "   Universal OS & KVM VPS Installer"
+echo "   DragonCloud Universal Installer"
 echo "========================================"
 echo "1) Reinstall MAIN VPS (Disk Wipe)"
 echo "2) Create KVM VPS (Virtual Machine)"
@@ -24,9 +96,9 @@ echo "3) Exit"
 echo "========================================"
 read -p "Select option: " MAIN
 
-########################################
+#################################
 # MAIN VPS REINSTALL
-########################################
+#################################
 if [ "$MAIN" = "1" ]; then
   clear
   echo "---- VPS Reinstall ----"
@@ -49,7 +121,6 @@ if [ "$MAIN" = "1" ]; then
   read -p "Type YES to WIPE DISK: " CONFIRM
   [ "$CONFIRM" != "YES" ] && exit 0
 
-  install_deps
   cd $WORKDIR
   wget -O os.img $URL
 
@@ -62,13 +133,13 @@ if [ "$MAIN" = "1" ]; then
 
   dd if=$IMAGE of=$DISK bs=4M status=progress conv=fsync
   sync
-  echo "✅ VPS Installed. Reboot now."
+  echo "✅ OS Installed. Reboot now."
   exit 0
 fi
 
-########################################
+#################################
 # KVM VPS CREATOR
-########################################
+#################################
 if [ "$MAIN" = "2" ]; then
   clear
   echo "---- KVM VPS Creator ----"
@@ -91,14 +162,12 @@ if [ "$MAIN" = "2" ]; then
   read -p "CPU Cores: " CPU
   read -p "Disk Size (GB): " DISKGB
 
-  install_deps
   cd $WORKDIR
 
   BASE_IMAGE=$NAME-base.qcow2
   VM_DISK=/var/lib/libvirt/images/$VMNAME.qcow2
 
   [ ! -f $BASE_IMAGE ] && wget -O $BASE_IMAGE $URL
-
   qemu-img create -f qcow2 -b $BASE_IMAGE $VM_DISK ${DISKGB}G
 
   virt-install \
@@ -111,10 +180,6 @@ if [ "$MAIN" = "2" ]; then
     --network network=default \
     --noautoconsole
 
-  echo "========================================"
-  echo "🎉 VPS Created Successfully!"
-  echo "VM Name: $VMNAME"
-  echo "Manage with: virsh list --all"
-  echo "========================================"
+  echo "🎉 KVM VPS Created Successfully!"
   exit 0
 fi
